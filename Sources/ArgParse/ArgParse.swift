@@ -2,7 +2,9 @@ public struct ArgumentParser {
 
     public typealias ParseResult = [String: Any]
 
-    public init<S>(_ arguments: S) where S: Sequence, S.Element == Argument {
+    public init<S>(name: String? = nil, brief: String? = nil, arguments: S)
+        where S: Sequence, S.Element == Argument
+    {
         var seen: Set<String> = []
         for arg in arguments {
             precondition(!seen.contains(arg.name), "Duplicate argument: '\(arg.name)'")
@@ -13,6 +15,9 @@ public struct ArgumentParser {
                 options.insert(arg)
             }
         }
+
+        self.name = name ?? CommandLine.arguments.first ?? "-"
+        self.brief = brief
     }
 
     // swiftlint:disable:next cyclomatic_complexity
@@ -98,15 +103,63 @@ public struct ArgumentParser {
         return result
     }
 
-    private(set) var positionals: [Argument] = []
-    private(set) var options: Set<Argument> = []
+    private(set) public var positionals: [Argument] = []
+    private(set) public var options: Set<Argument> = []
+
+    /// The name of the program.
+    public let name: String
+
+    /// A brief description of the program.
+    public let brief: String?
+
+    /// Prints the usage description of the program.
+    public func printUsage<Target>(to output: inout Target)
+        where Target: TextOutputStream
+    {
+        // Overview.
+        if let brief = self.brief {
+            print("\(brief)", to: &output)
+        }
+
+        // Usage.
+        print("\n" + "usage: \(name)", terminator: "", to: &output)
+        if !options.isEmpty {
+            print(" [options]", terminator: "", to: &output)
+        }
+        if !positionals.isEmpty {
+            print(" " + positionals.map({ "<\($0.name)>" }).joined(separator: " "), to: &output)
+        }
+
+        // Positional arguments.
+        if !positionals.isEmpty {
+            print("\n" + "positional arguments:", to: &output)
+            for arg in positionals {
+                print("\(arg.helpText)", to: &output)
+            }
+        }
+
+        // Options.
+        if !options.isEmpty {
+            print("\n" + "options:", to: &output)
+            for arg in options.sorted(by: { $0.name < $1.name }) {
+                print("\(arg.helpText)", to: &output)
+            }
+        }
+    }
+
+    /// Prints the usage description of the program.
+    public func printUsage() {
+        var result = ""
+        printUsage(to: &result)
+        print(result)
+    }
 
 }
 
 extension ArgumentParser: ExpressibleByArrayLiteral {
 
     public init(arrayLiteral elements: Argument...) {
-        self.init(elements)
+        self.init(arguments: elements)
     }
 
 }
@@ -142,14 +195,34 @@ public struct Argument {
     /// Whether or not the argument is required.
     public var isRequired: Bool
 
+    /// A textual description of the argument.
+    public var description: String?
+
     /// A function that processes the command line value(s) for this argument.
     public let parse: (Any) throws -> Any
+
+    /// The help description of the argument.
+    public var helpText: String {
+        let heading = isPositional
+            ? "  " + name
+            : "  " + (alias.map({ "-\($0), " }) ?? "") + "--\(name)"
+
+        if let description = self.description {
+            let padding = 20 - heading.count
+            return padding > 0
+                ? heading + String(repeating: " ", count: padding) + description
+                : heading + "\n" + String(repeating: " ", count: 20) + description
+        } else {
+            return heading
+        }
+    }
 
     /// Creates a positional argument.
     public static func positional<T>(
         _ name: String,
         defaultValue: T? = nil,
         isRequired: Bool = false,
+        description: String? = nil,
         parse: @escaping (String) throws -> T)
         -> Argument
     {
@@ -160,15 +233,21 @@ public struct Argument {
             arity: nil,
             isPositional: true,
             isRequired: isRequired,
+            description: description,
             parse: { try parse($0 as! String) as Any }) // swiftlint:disable:this force_cast
     }
 
     /// Creates a positional argument.
     public static func positional(
-        _ name: String, defaultValue: String? = nil, isRequired: Bool = false)
+        _ name: String,
+        defaultValue: String? = nil,
+        isRequired: Bool = false,
+        description: String? = nil)
         -> Argument
     {
-        return .positional(name, defaultValue: defaultValue, isRequired: isRequired) { $0 }
+        return .positional(
+            name, defaultValue: defaultValue, isRequired: isRequired, description: description,
+            parse: { $0 })
     }
 
     /// Creates a variadic positional argument.
@@ -177,6 +256,7 @@ public struct Argument {
         defaultValue: T? = nil,
         arity: Arity = 1...Int.max,
         isRequired: Bool = false,
+        description: String? = nil,
         parse: @escaping (ArraySlice<String>) throws -> T)
         -> Argument
     {
@@ -187,6 +267,7 @@ public struct Argument {
             arity: arity,
             isPositional: true,
             isRequired: isRequired,
+            description: description,
             parse: { try parse($0 as! ArraySlice<String>) as Any }) // swiftlint:disable:this force_cast
     }
 
@@ -195,12 +276,13 @@ public struct Argument {
         _ name: String,
         defaultValue: [String]? = nil,
         arity: Arity = 1...Int.max,
-        isRequired: Bool = false)
+        isRequired: Bool = false,
+        description: String? = nil)
         -> Argument
     {
         return .variadic(
             name, defaultValue: defaultValue, arity: arity, isRequired: isRequired,
-            parse: { Array($0) })
+            description: description, parse: { Array($0) })
     }
 
     /// Creates an option.
@@ -209,6 +291,7 @@ public struct Argument {
         alias: String? = nil,
         defaultValue: T? = nil,
         isRequired: Bool = false,
+        description: String? = nil,
         parse: @escaping (String) throws -> T)
         -> Argument
     {
@@ -219,16 +302,22 @@ public struct Argument {
             arity: nil,
             isPositional: false,
             isRequired: isRequired,
+            description: description,
             parse: { try parse($0 as! String) as Any }) // swiftlint:disable:this force_cast
     }
 
     /// Creates an option.
     public static func option(
-        _ name: String, alias: String? = nil, defaultValue: String? = nil, isRequired: Bool = false)
+        _ name: String,
+        alias: String? = nil,
+        defaultValue: String? = nil,
+        isRequired: Bool = false,
+        description: String? = nil)
         -> Argument
     {
         return .option(
-            name, alias: alias, defaultValue: defaultValue, isRequired: isRequired) { $0 }
+            name, alias: alias, defaultValue: defaultValue, isRequired: isRequired,
+            description: description, parse: { $0 })
     }
 
     /// Creates a variadic option.
@@ -238,6 +327,7 @@ public struct Argument {
         defaultValue: T? = nil,
         arity: Arity = 1...Int.max,
         isRequired: Bool = false,
+        description: String? = nil,
         parse: @escaping (ArraySlice<String>) throws -> T)
         -> Argument
     {
@@ -248,6 +338,7 @@ public struct Argument {
             arity: arity,
             isPositional: false,
             isRequired: isRequired,
+            description: description,
             parse: { try parse($0 as! ArraySlice<String>) as Any }) // swiftlint:disable:this force_cast
     }
 
@@ -257,19 +348,21 @@ public struct Argument {
         alias: String? = nil,
         defaultValue: [String]? = nil,
         arity: Arity = 1...Int.max,
-        isRequired: Bool = false)
+        isRequired: Bool = false,
+        description: String? = nil)
         -> Argument
     {
         return .variadicOption(
             name, alias: alias, defaultValue: defaultValue, arity: arity, isRequired: isRequired,
-            parse: { Array($0) })
+            description: description, parse: { Array($0) })
     }
 
     /// Creates a flag.
     public static func flag(
         _ name: String,
         alias: String? = nil,
-        defaultValue: Bool = false)
+        defaultValue: Bool = false,
+        description: String? = nil)
         -> Argument
     {
         return Argument(
@@ -279,6 +372,7 @@ public struct Argument {
             arity: 0...0,
             isPositional: false,
             isRequired: false,
+            description: description,
             parse: { _ in true })
     }
 
@@ -317,6 +411,7 @@ extension Argument {
         _ name: String,
         defaultValue: T? = nil,
         isRequired: Bool = false,
+        description: String? = nil,
         parse: @escaping (String) throws -> T = T.init)
         -> Argument
     {
@@ -327,6 +422,7 @@ extension Argument {
             arity: nil,
             isPositional: true,
             isRequired: isRequired,
+            description: description,
             parse: { try parse($0 as! String) as Any }) // swiftlint:disable:this force_cast
     }
 
@@ -336,6 +432,7 @@ extension Argument {
         defaultValue: [T]? = nil,
         arity: Arity = 1...Int.max,
         isRequired: Bool = false,
+        description: String? = nil,
         parse: @escaping (ArraySlice<String>) throws -> [T] = { try $0.map(T.init) })
         -> Argument
     {
@@ -346,6 +443,7 @@ extension Argument {
             arity: arity,
             isPositional: true,
             isRequired: isRequired,
+            description: description,
             parse: { try parse($0 as! ArraySlice<String>) as Any }) // swiftlint:disable:this force_cast
     }
 
@@ -355,6 +453,7 @@ extension Argument {
         alias: String? = nil,
         defaultValue: T? = nil,
         isRequired: Bool = false,
+        description: String? = nil,
         parse: @escaping (String) throws -> T = T.init)
         -> Argument
     {
@@ -365,6 +464,7 @@ extension Argument {
             arity: nil,
             isPositional: false,
             isRequired: isRequired,
+            description: description,
             parse: { try parse($0 as! String) as Any }) // swiftlint:disable:this force_cast
     }
 
@@ -375,6 +475,7 @@ extension Argument {
         defaultValue: [T]? = nil,
         arity: Arity = 1...Int.max,
         isRequired: Bool = false,
+        description: String? = nil,
         parse: @escaping (ArraySlice<String>) throws -> [T] = { try $0.map(T.init) })
         -> Argument
     {
@@ -385,12 +486,13 @@ extension Argument {
             arity: arity,
             isPositional: false,
             isRequired: isRequired,
+            description: description,
             parse: { try parse($0 as! ArraySlice<String>) as Any }) // swiftlint:disable:this force_cast
     }
 
 }
 
-enum ArgumentParserError: Error {
+public enum ArgumentParserError: Error {
 
     case emptyCommandLine
     case missingArguments([Argument])

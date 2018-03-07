@@ -389,6 +389,18 @@ class ArgParseTests: XCTestCase {
         XCTAssertThrowsError(try parser.parse(["program", "-O"]))
     }
 
+    func testPrintUsage() {
+        let parser: ArgumentParser = [
+            .variadic("inputs", isRequired: true, description: "The input files"),
+            .option("output", alias: "o", description: "The output file"),
+            .flag("optimized", alias: "O", description: "Enable optimizations"),
+        ]
+
+        var usage = ""
+        parser.printUsage(to: &usage)
+        XCTAssertFalse(usage.isEmpty)
+    }
+
     static var allTests = [
         ("testNoArgument", testNoArgument),
         ("testPositional", testPositional),
@@ -406,6 +418,7 @@ class ArgParseTests: XCTestCase {
         ("testOptionWithDefault", testOptionWithDefault),
         ("testOptionWithDefault", testOptionWithAutoConversion),
         ("testOptionWithDefault", testOptionWithCustomConversion),
+        ("testPrintUsage", testPrintUsage),
     ]
 
 }
