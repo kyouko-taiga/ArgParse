@@ -423,7 +423,7 @@ extension Argument {
 
 }
 
-enum ArgumentParserError: Error {
+public enum ArgumentParserError: Error {
 
     case emptyCommandLine
     case missingArguments([Argument])
