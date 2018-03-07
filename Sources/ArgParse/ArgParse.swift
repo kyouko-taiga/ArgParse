@@ -2,7 +2,9 @@ public struct ArgumentParser {
 
     public typealias ParseResult = [String: Any]
 
-    public init<S>(_ arguments: S) where S: Sequence, S.Element == Argument {
+    public init<S>(name: String? = nil, brief: String? = nil, arguments: S)
+        where S: Sequence, S.Element == Argument
+    {
         var seen: Set<String> = []
         for arg in arguments {
             precondition(!seen.contains(arg.name), "Duplicate argument: '\(arg.name)'")
@@ -98,15 +100,21 @@ public struct ArgumentParser {
         return result
     }
 
-    private(set) var positionals: [Argument] = []
-    private(set) var options: Set<Argument> = []
+    private(set) public var positionals: [Argument] = []
+    private(set) public var options: Set<Argument> = []
+
+    /// The name of the program.
+    public let name: String? = nil
+
+    /// A brief description of the program.
+    public let brief: String? = nil
 
 }
 
 extension ArgumentParser: ExpressibleByArrayLiteral {
 
     public init(arrayLiteral elements: Argument...) {
-        self.init(elements)
+        self.init(arguments: elements)
     }
 
 }
