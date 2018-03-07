@@ -15,6 +15,9 @@ public struct ArgumentParser {
                 options.insert(arg)
             }
         }
+
+        self.name = name ?? CommandLine.arguments.first ?? "-"
+        self.brief = brief
     }
 
     // swiftlint:disable:next cyclomatic_complexity
@@ -104,10 +107,52 @@ public struct ArgumentParser {
     private(set) public var options: Set<Argument> = []
 
     /// The name of the program.
-    public let name: String? = nil
+    public let name: String
 
     /// A brief description of the program.
-    public let brief: String? = nil
+    public let brief: String?
+
+    /// Prints the usage description of the program.
+    public func printUsage<Target>(to output: inout Target)
+        where Target: TextOutputStream
+    {
+        // Overview.
+        if let brief = self.brief {
+            print("\(brief)", to: &output)
+        }
+
+        // Usage.
+        print("\n" + "usage: \(name)", terminator: "", to: &output)
+        if !options.isEmpty {
+            print(" [options]", terminator: "", to: &output)
+        }
+        if !positionals.isEmpty {
+            print(" " + positionals.map({ "<\($0.name)>" }).joined(separator: " "), to: &output)
+        }
+
+        // Positional arguments.
+        if !positionals.isEmpty {
+            print("\n" + "positional arguments:", to: &output)
+            for arg in positionals {
+                print("\(arg.helpText)", to: &output)
+            }
+        }
+
+        // Options.
+        if !options.isEmpty {
+            print("\n" + "options:", to: &output)
+            for arg in options.sorted(by: { $0.name < $1.name }) {
+                print("\(arg.helpText)", to: &output)
+            }
+        }
+    }
+
+    /// Prints the usage description of the program.
+    public func printUsage() {
+        var result = ""
+        printUsage(to: &result)
+        print(result)
+    }
 
 }
 
@@ -155,6 +200,22 @@ public struct Argument {
 
     /// A function that processes the command line value(s) for this argument.
     public let parse: (Any) throws -> Any
+
+    /// The help description of the argument.
+    public var helpText: String {
+        let heading = isPositional
+            ? "  " + name
+            : "  " + (alias.map({ "-\($0), " }) ?? "") + "--\(name)"
+
+        if let description = self.description {
+            let padding = 20 - heading.count
+            return padding > 0
+                ? heading + String(repeating: " ", count: padding) + description
+                : heading + "\n" + String(repeating: " ", count: 20) + description
+        } else {
+            return heading
+        }
+    }
 
     /// Creates a positional argument.
     public static func positional<T>(
