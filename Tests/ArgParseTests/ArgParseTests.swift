@@ -364,7 +364,7 @@ class ArgParseTests: XCTestCase {
       .variadic("inputs", isRequired: true),
       .option("output", alias: "o"),
       .flag("optimized", alias: "O"),
-      ]
+    ]
 
     // Should produce `["inputs": ["a", "b"], "output": "c", "optimized": true]`
     let lines = [
@@ -394,7 +394,7 @@ class ArgParseTests: XCTestCase {
       .variadic("inputs", isRequired: true, description: "The input files"),
       .option("output", alias: "o", description: "The output file"),
       .flag("optimized", alias: "O", description: "Enable optimizations"),
-      ]
+    ]
 
     var usage = ""
     parser.printUsage(to: &usage)
