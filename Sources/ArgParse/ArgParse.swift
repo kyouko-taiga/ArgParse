@@ -380,8 +380,8 @@ public struct Argument {
 
 extension Argument: Hashable {
 
-    public var hashValue: Int {
-        return name.hashValue
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(name)
     }
 
     public static func == (lhs: Argument, rhs: Argument) -> Bool {
