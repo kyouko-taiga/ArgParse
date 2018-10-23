@@ -1,6 +1,8 @@
 import XCTest
-@testable import ArgParseTests
 
-XCTMain([
-    testCase(ArgParseTests.allTests),
-])
+import ArgParseTests
+
+var tests = [XCTestCaseEntry]()
+tests += ArgParseTests.__allTests()
+
+XCTMain(tests)
